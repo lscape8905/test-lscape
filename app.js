@@ -120,31 +120,58 @@ document.addEventListener('DOMContentLoaded', () => {
 
     // --- API Calls ---
 
+    // JSONP Helper Function to bypass CORS
+    function fetchJsonp(url) {
+        return new Promise((resolve, reject) => {
+            const callbackName = 'vworld_jsonp_' + Math.round(100000 * Math.random());
+            const script = document.createElement('script');
+            script.src = url + '&callback=' + callbackName;
+            
+            window[callbackName] = function(data) {
+                delete window[callbackName];
+                document.body.removeChild(script);
+                resolve(data);
+            };
+            
+            script.onerror = function() {
+                delete window[callbackName];
+                document.body.removeChild(script);
+                reject(new Error('JSONP Request Failed'));
+            };
+            
+            document.body.appendChild(script);
+        });
+    }
+
     async function getCoordinates(address) {
-        // 도로명 주소 또는 지번 주소 검색
-        const url = `https://api.vworld.kr/req/address?service=address&request=getcoord&version=2.0&crs=epsg:4326&address=${encodeURIComponent(address)}&refine=true&simple=false&format=json&type=road&key=${API_KEY}&domain=${DOMAIN}`;
+        // 도로명 주소 검색 (JSONP 방식)
+        const url = `https://api.vworld.kr/req/address?service=address&request=getcoord&version=2.0&crs=epsg:4326&address=${encodeURIComponent(address)}&refine=true&simple=false&format=jsonp&type=road&key=${API_KEY}&domain=${DOMAIN}`;
         
         try {
-            // Using JSONP or standard Fetch. VWorld address API supports CORS now.
-            const res = await fetch(url);
-            const data = await res.json();
+            const data = await fetchJsonp(url);
+
+            // API 키 또는 도메인 오류 확인
+            if (data.response && data.response.status === 'ERROR') {
+                alert('VWorld API 에러: ' + data.response.error.text + '\n(VWorld 개발자 센터에서 서비스 URL을 "lscape8905.github.io"로 정확히 수정해주세요!)');
+                return null;
+            }
             
-            if (data.response.status === 'OK' && data.response.result.items.length > 0) {
+            if (data.response && data.response.status === 'OK' && data.response.result.items.length > 0) {
                 const pt = data.response.result.items[0].point;
                 return { x: pt.x, y: pt.y };
             }
             
             // 지번 주소로 재시도
-            const urlParcel = `https://api.vworld.kr/req/address?service=address&request=getcoord&version=2.0&crs=epsg:4326&address=${encodeURIComponent(address)}&refine=true&simple=false&format=json&type=parcel&key=${API_KEY}&domain=${DOMAIN}`;
-            const res2 = await fetch(urlParcel);
-            const data2 = await res2.json();
+            const urlParcel = `https://api.vworld.kr/req/address?service=address&request=getcoord&version=2.0&crs=epsg:4326&address=${encodeURIComponent(address)}&refine=true&simple=false&format=jsonp&type=parcel&key=${API_KEY}&domain=${DOMAIN}`;
+            const data2 = await fetchJsonp(urlParcel);
             
-            if (data2.response.status === 'OK' && data2.response.result.items.length > 0) {
+            if (data2.response && data2.response.status === 'OK' && data2.response.result.items.length > 0) {
                 const pt = data2.response.result.items[0].point;
                 return { x: pt.x, y: pt.y };
             }
         } catch (e) {
-            console.warn('CORS or Network Error in Geocoding:', e);
+            console.warn('JSONP Error in Geocoding:', e);
+            alert('데이터 통신 오류가 발생했습니다. (도메인 불일치 또는 CORS 차단)');
         }
         return null;
     }
