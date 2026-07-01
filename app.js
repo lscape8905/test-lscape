@@ -1,0 +1,227 @@
+document.addEventListener('DOMContentLoaded', () => {
+    const searchBtn = document.getElementById('searchBtn');
+    const addressInput = document.getElementById('addressInput');
+    const searchSection = document.getElementById('searchSection');
+    const reportSection = document.getElementById('reportSection');
+    const header = document.getElementById('header');
+    const resetBtn = document.getElementById('resetBtn');
+
+    // Values elements
+    const reportAddress = document.getElementById('reportAddress');
+    const valCategory = document.getElementById('valCategory');
+    const valZoning = document.getElementById('valZoning');
+    const valSlope = document.getElementById('valSlope');
+    const valRestrictions = document.getElementById('valRestrictions');
+    const statusBadge = document.getElementById('statusBadge');
+
+    const API_KEY = 'D12D5EEE-FEDA-3EE2-9283-F25E42FD7653';
+    const DOMAIN = 'rainbow-bublanina-7cf48a.netlify.app';
+    let vwMap = null;
+
+    searchBtn.addEventListener('click', handleSearch);
+    addressInput.addEventListener('keypress', (e) => {
+        if (e.key === 'Enter') handleSearch();
+    });
+
+    resetBtn.addEventListener('click', () => {
+        addressInput.value = '';
+        reportSection.classList.add('hidden');
+        searchSection.classList.remove('analyzed');
+        header.classList.remove('compact');
+    });
+
+    async function handleSearch() {
+        const address = addressInput.value.trim();
+        if (!address) {
+            alert('주소를 입력해주세요.');
+            return;
+        }
+
+        // UI State: Loading
+        const btnText = searchBtn.querySelector('.btn-text');
+        const btnLoader = searchBtn.querySelector('.btn-loader');
+        
+        btnText.classList.add('hidden');
+        btnLoader.classList.remove('hidden');
+        searchBtn.disabled = true;
+        statusBadge.textContent = "분석 중...";
+        statusBadge.className = "badge warning";
+
+        try {
+            // 1. Geocoding (주소 -> 좌표)
+            const coords = await getCoordinates(address);
+            if (!coords) {
+                alert('주소를 찾을 수 없습니다. 정확한 주소를 입력해주세요.');
+                resetUI();
+                return;
+            }
+
+            // 2. 토지특성 가져오기
+            const landInfo = await getLandInfo(coords.x, coords.y);
+            
+            // 3. 규제정보 가져오기 (개발제한, 문화재)
+            const restrictions = await getRestrictions(coords.x, coords.y);
+
+            // Populate Data
+            reportAddress.textContent = address;
+            valCategory.textContent = landInfo.category || '정보 없음';
+            valZoning.textContent = landInfo.zoning || '정보 없음';
+            
+            const terrainInfo = [];
+            if (landInfo.terrainForm) terrainInfo.push(landInfo.terrainForm);
+            if (landInfo.terrainHeight) terrainInfo.push(landInfo.terrainHeight);
+            valSlope.textContent = terrainInfo.length > 0 ? terrainInfo.join(' / ') : '정보 없음';
+
+            // Populate Restrictions
+            valRestrictions.innerHTML = '';
+            if (restrictions.length === 0) {
+                valRestrictions.innerHTML = `<li class="restriction-item none"><span class="icon">✅</span> 저촉되는 주요 규제 없음</li>`;
+            } else {
+                restrictions.forEach(r => {
+                    const li = document.createElement('li');
+                    li.className = 'restriction-item';
+                    li.innerHTML = `<span class="icon">⚠️</span> ${r} 저촉`;
+                    valRestrictions.appendChild(li);
+                });
+            }
+
+            // UI State: Show Report
+            searchSection.classList.add('analyzed');
+            header.classList.add('compact');
+            reportSection.classList.remove('hidden');
+            
+            // Retrigger animations
+            const cards = document.querySelectorAll('.card');
+            cards.forEach(card => {
+                card.style.animation = 'none';
+                card.offsetHeight; // trigger reflow
+                card.style.animation = null; 
+            });
+
+            statusBadge.textContent = "분석 완료";
+            statusBadge.className = "badge success";
+
+            // Initialize or Move 3D Map
+            initOrUpdate3DMap(coords.x, coords.y);
+
+        } catch (error) {
+            console.error(error);
+            alert('데이터를 분석하는 도중 오류가 발생했습니다. 개발자 도구 콘솔을 확인해주세요.');
+        } finally {
+            resetUI();
+        }
+
+        function resetUI() {
+            btnText.classList.remove('hidden');
+            btnLoader.classList.add('hidden');
+            searchBtn.disabled = false;
+        }
+    }
+
+    // --- API Calls ---
+
+    async function getCoordinates(address) {
+        // 도로명 주소 또는 지번 주소 검색
+        const url = `https://api.vworld.kr/req/address?service=address&request=getcoord&version=2.0&crs=epsg:4326&address=${encodeURIComponent(address)}&refine=true&simple=false&format=json&type=road&key=${API_KEY}&domain=${DOMAIN}`;
+        
+        try {
+            // Using JSONP or standard Fetch. VWorld address API supports CORS now.
+            const res = await fetch(url);
+            const data = await res.json();
+            
+            if (data.response.status === 'OK' && data.response.result.items.length > 0) {
+                const pt = data.response.result.items[0].point;
+                return { x: pt.x, y: pt.y };
+            }
+            
+            // 지번 주소로 재시도
+            const urlParcel = `https://api.vworld.kr/req/address?service=address&request=getcoord&version=2.0&crs=epsg:4326&address=${encodeURIComponent(address)}&refine=true&simple=false&format=json&type=parcel&key=${API_KEY}&domain=${DOMAIN}`;
+            const res2 = await fetch(urlParcel);
+            const data2 = await res2.json();
+            
+            if (data2.response.status === 'OK' && data2.response.result.items.length > 0) {
+                const pt = data2.response.result.items[0].point;
+                return { x: pt.x, y: pt.y };
+            }
+        } catch (e) {
+            console.warn('CORS or Network Error in Geocoding:', e);
+        }
+        return null;
+    }
+
+    async function getLandInfo(x, y) {
+        // VWorld Data API - LP_PA_CBND_BUBUN (토지특성정보)
+        const url = `https://api.vworld.kr/req/data?service=data&request=GetFeature&data=LP_PA_CBND_BUBUN&key=${API_KEY}&domain=${DOMAIN}&geomFilter=POINT(${x} ${y})`;
+        
+        const result = { category: null, zoning: null, terrainForm: null, terrainHeight: null };
+        try {
+            const res = await fetch(url);
+            const data = await res.json();
+            if (data.response.status === 'OK' && data.response.result.featureCollection.features.length > 0) {
+                const props = data.response.result.featureCollection.features[0].properties;
+                result.category = props.lndcgr_code_nm; // 지목
+                result.zoning = props.prpos_area_1_nm; // 용도지역
+                result.terrainForm = props.tpgrph_frm_code_nm; // 지형형상
+                result.terrainHeight = props.tpgrph_hg_code_nm; // 지형높이(경사)
+            }
+        } catch (e) {
+            console.warn('Error fetching land info:', e);
+        }
+        return result;
+    }
+
+    async function getRestrictions(x, y) {
+        const restrictions = [];
+        // 1. 개발제한구역 (LT_C_UD801)
+        const devLimitUrl = `https://api.vworld.kr/req/data?service=data&request=GetFeature&data=LT_C_UD801&key=${API_KEY}&domain=${DOMAIN}&geomFilter=POINT(${x} ${y})`;
+        try {
+            const res1 = await fetch(devLimitUrl);
+            const data1 = await res1.json();
+            if (data1.response.status === 'OK' && data1.response.result.featureCollection.features.length > 0) {
+                restrictions.push('개발제한구역');
+            }
+        } catch(e) {}
+
+        // 2. 문화재보호구역 (LT_C_LHCHB)
+        const culturalUrl = `https://api.vworld.kr/req/data?service=data&request=GetFeature&data=LT_C_LHCHB&key=${API_KEY}&domain=${DOMAIN}&geomFilter=POINT(${x} ${y})`;
+        try {
+            const res2 = await fetch(culturalUrl);
+            const data2 = await res2.json();
+            if (data2.response.status === 'OK' && data2.response.result.featureCollection.features.length > 0) {
+                restrictions.push('문화재보호구역');
+            }
+        } catch(e) {}
+
+        return restrictions;
+    }
+
+    function initOrUpdate3DMap(x, y) {
+        // VWorld 3D WebGL Map
+        if (!window.vw) {
+            document.getElementById('vmap').innerHTML = '<div style="color:white; padding: 20px; text-align:center;">VWorld 3D 스크립트를 로드할 수 없습니다.<br>(CORS 또는 API 키 도메인 불일치 문제일 수 있습니다.)</div>';
+            return;
+        }
+
+        if (vwMap == null) {
+            let mapOptions = new vw.MapOptions(
+                vw.basemapType.GRAPHIC,
+                "",
+                vw.DensityType.FULL,
+                vw.DensityType.BASIC,
+                false,
+                new vw.CameraPosition(new vw.CoordZ(Number(x), Number(y), 1000), new vw.Direction(0, -45, 0)),
+                new vw.CameraPosition(new vw.CoordZ(Number(x), Number(y), 1000), new vw.Direction(0, -45, 0))
+            );
+
+            vwMap = new vw.Map("vmap", mapOptions);
+            
+            // setTimeout to wait for map load
+            setTimeout(() => {
+                vwMap.moveTo(new vw.CameraPosition(new vw.CoordZ(Number(x), Number(y), 500), new vw.Direction(0, -45, 0)));
+            }, 2000);
+        } else {
+            // Map already initialized, just move camera
+            vwMap.moveTo(new vw.CameraPosition(new vw.CoordZ(Number(x), Number(y), 500), new vw.Direction(0, -45, 0)));
+        }
+    }
+});
