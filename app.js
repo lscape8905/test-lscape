@@ -233,7 +233,7 @@ document.addEventListener('DOMContentLoaded', () => {
 
         if (vwMap == null) {
             let mapOptions = new vw.MapOptions(
-                vw.basemapType.GRAPHIC,
+                vw.BasemapType.GRAPHIC,
                 "",
                 vw.DensityType.FULL,
                 vw.DensityType.BASIC,
