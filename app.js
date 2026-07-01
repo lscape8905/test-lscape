@@ -15,7 +15,7 @@ document.addEventListener('DOMContentLoaded', () => {
     const statusBadge = document.getElementById('statusBadge');
 
     const API_KEY = 'D12D5EEE-FEDA-3EE2-9283-F25E42FD7653';
-    const DOMAIN = 'rainbow-bublanina-7cf48a.netlify.app';
+    const DOMAIN = 'lscape8905.github.io';
     let vwMap = null;
 
     searchBtn.addEventListener('click', handleSearch);
