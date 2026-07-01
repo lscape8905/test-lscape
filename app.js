@@ -225,13 +225,17 @@ document.addEventListener('DOMContentLoaded', () => {
     }
 
     function initOrUpdate3DMap(x, y) {
-        // VWorld 3D WebGL Map
-        if (!window.vw) {
-            document.getElementById('vmap').innerHTML = '<div style="color:white; padding: 20px; text-align:center;">VWorld 3D 스크립트를 로드할 수 없습니다.<br>(CORS 또는 API 키 도메인 불일치 문제일 수 있습니다.)</div>';
-            return;
-        }
+        try {
+            const mapContainer = document.getElementById('vmap');
+            
+            if (!window.vw || !window.vw.Map) {
+                mapContainer.innerHTML = '<div style="color:white; padding: 20px; text-align:center;">VWorld 3D 엔진이 아직 로드되지 않았거나 지원되지 않습니다.</div>';
+                return;
+            }
 
-        if (vwMap == null) {
+            // 완전히 새로 그리기 위해 컨테이너 초기화
+            mapContainer.innerHTML = '';
+            
             let mapOptions = new vw.MapOptions(
                 vw.BasemapType.GRAPHIC,
                 "",
@@ -243,14 +247,9 @@ document.addEventListener('DOMContentLoaded', () => {
             );
 
             vwMap = new vw.Map("vmap", mapOptions);
-            
-            // setTimeout to wait for map load
-            setTimeout(() => {
-                vwMap.moveTo(new vw.CameraPosition(new vw.CoordZ(Number(x), Number(y), 500), new vw.Direction(0, -45, 0)));
-            }, 2000);
-        } else {
-            // Map already initialized, just move camera
-            vwMap.moveTo(new vw.CameraPosition(new vw.CoordZ(Number(x), Number(y), 500), new vw.Direction(0, -45, 0)));
+        } catch (err) {
+            console.error('3D Map Initialization Error:', err);
+            document.getElementById('vmap').innerHTML = '<div style="color:white; padding: 20px; text-align:center;">3D 지도를 렌더링하는 중 오류가 발생했습니다.<br>(API 권한 문제일 수 있습니다.)</div>';
         }
     }
 });
