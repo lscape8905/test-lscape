@@ -156,8 +156,9 @@ document.addEventListener('DOMContentLoaded', () => {
                 return null;
             }
             
-            if (data.response && data.response.status === 'OK' && data.response.result.items.length > 0) {
-                const pt = data.response.result.items[0].point;
+            // 구조 수정: Address API는 result.items가 아니라 result.point를 반환합니다.
+            if (data.response && data.response.status === 'OK' && data.response.result && data.response.result.point) {
+                const pt = data.response.result.point;
                 return { x: pt.x, y: pt.y };
             }
             
@@ -165,13 +166,13 @@ document.addEventListener('DOMContentLoaded', () => {
             const urlParcel = `https://api.vworld.kr/req/address?service=address&request=getcoord&version=2.0&crs=epsg:4326&address=${encodeURIComponent(address)}&refine=true&simple=false&format=jsonp&type=parcel&key=${API_KEY}&domain=${DOMAIN}`;
             const data2 = await fetchJsonp(urlParcel);
             
-            if (data2.response && data2.response.status === 'OK' && data2.response.result.items.length > 0) {
-                const pt = data2.response.result.items[0].point;
+            if (data2.response && data2.response.status === 'OK' && data2.response.result && data2.response.result.point) {
+                const pt = data2.response.result.point;
                 return { x: pt.x, y: pt.y };
             }
         } catch (e) {
             console.warn('JSONP Error in Geocoding:', e);
-            alert('데이터 통신 오류가 발생했습니다. (도메인 불일치 또는 CORS 차단)');
+            alert('데이터 통신 오류가 발생했습니다. 개발자 도구를 확인해주세요.');
         }
         return null;
     }
