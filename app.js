@@ -14,8 +14,9 @@ document.addEventListener('DOMContentLoaded', () => {
     const valRestrictions = document.getElementById('valRestrictions');
     const statusBadge = document.getElementById('statusBadge');
 
+    // --- API Configuration ---
     const API_KEY = 'D12D5EEE-FEDA-3EE2-9283-F25E42FD7653';
-    const DOMAIN = 'lscape8905.github.io';
+    const DOMAIN = 'lscape8905.github.io/test-lscape/';
     let vwMap = null;
 
     searchBtn.addEventListener('click', handleSearch);
