@@ -107,7 +107,7 @@ document.addEventListener('DOMContentLoaded', () => {
 
         } catch (error) {
             console.error(error);
-            alert('데이터를 분석하는 도중 오류가 발생했습니다. 개발자 도구 콘솔을 확인해주세요.');
+            alert(`[에러 발생] 화면을 캡처해서 보여주세요!\n\n${error.message}\n\n${error.stack}`);
         } finally {
             resetUI();
         }
